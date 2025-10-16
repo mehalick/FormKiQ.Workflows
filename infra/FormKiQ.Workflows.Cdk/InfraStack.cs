@@ -9,7 +9,7 @@ namespace FormKiQ.Workflows.Cdk;
 
 public class InfraStack : Stack
 {
-    internal InfraStack(Construct scope, string id, IConfiguration configuration, IStackProps props = null) : base(scope, id, props)
+    internal InfraStack(Construct scope, string id, IConfiguration configuration, IStackProps props) : base(scope, id, props)
     {
         var existingTopic = Topic.FromTopicArn(this, "SnsDocumentEventTopic", configuration["AWS:SnsTopicArn"]!);
         var queue = CreateQueueWithSnsSubscription("DocumentEventQueue", existingTopic);
