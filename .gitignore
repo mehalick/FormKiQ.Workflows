@@ -29,3 +29,7 @@ artifacts/
 node_modules
 wwwroot/dist/
 _tmp/
+
+# CDK
+.cdk.staging
+cdk.out
