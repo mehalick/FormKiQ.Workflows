@@ -52,6 +52,20 @@ public class InfraStack : Stack
         const string folder = $"../apps/{project}/bin/Release/net8.0";
         const string handler = $"{project}::{project}.Function::FunctionHandler";
         
+        var formKiqBaseUrl = configuration["FormKiQ:BaseUrl"];
+        
+        if (string.IsNullOrWhiteSpace(formKiqBaseUrl))
+        {
+            throw new("FormKiQ API URL is missing");
+        }
+        
+        var formKiQApiKey = configuration["FormKiQ:ApiKey"];
+
+        if (string.IsNullOrWhiteSpace(formKiQApiKey))
+        {
+            throw new("FormKiQ API Key is missing");
+        }
+        
         var slackWebhookUrl = configuration["Slack:WebhookUrl"];
 
         if (string.IsNullOrWhiteSpace(slackWebhookUrl))
@@ -78,7 +92,9 @@ public class InfraStack : Stack
                 Tracing = Tracing.ACTIVE,
                 Environment = new Dictionary<string, string>
                 {
-                    { "SLACK_WEBHOOK_URL", slackWebhookUrl }
+                    { "SLACK_WEBHOOK_URL", slackWebhookUrl },
+                    { "FORMKIQ_BASE_URL", formKiqBaseUrl },
+                    { "FORMKIQ_API_KEY", formKiQApiKey }
                 }
             });
     }

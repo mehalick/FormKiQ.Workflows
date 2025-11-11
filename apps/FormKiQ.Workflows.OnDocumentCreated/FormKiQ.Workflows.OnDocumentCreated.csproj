@@ -14,5 +14,7 @@
         <PackageReference Include="AWS.Lambda.Powertools.BatchProcessing" />
         <PackageReference Include="AWS.Lambda.Powertools.Logging" />
         <PackageReference Include="JetBrains.Annotations" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Microsoft.Extensions.Http" />
     </ItemGroup>
 </Project>

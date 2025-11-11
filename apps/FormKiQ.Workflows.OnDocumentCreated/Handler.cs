@@ -1,5 +1,7 @@
-﻿using System.Net.Http.Json;
+﻿using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Amazon.Lambda.SQSEvents;
 using AWS.Lambda.Powertools.BatchProcessing;
 using AWS.Lambda.Powertools.BatchProcessing.Sqs;
@@ -9,6 +11,13 @@ namespace FormKiQ.Workflows.OnDocumentCreated;
 
 public class Handler : ISqsRecordHandler
 {
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public Handler(IHttpClientFactory httpClientFactory)
+    {
+        _httpClientFactory = httpClientFactory;
+    }
+
     public async Task<RecordHandlerResult> HandleAsync(SQSEvent.SQSMessage record, CancellationToken cancellationToken)
     {
         Logger.LogInformation($"Handling SQS record {record.MessageId}");
@@ -32,7 +41,8 @@ public class Handler : ISqsRecordHandler
                 else
                 {
                     Logger.LogInformation("Document successfully deserialized {@Document}", documentDetails);
-
+                    
+                    await AddDocumentLabels(documentDetails, cancellationToken);
                     await SendSlackNotification(documentDetails, cancellationToken);
                 }
             }
@@ -45,7 +55,46 @@ public class Handler : ISqsRecordHandler
         return await Task.FromResult(RecordHandlerResult.None);
     }
 
-    private static async Task SendSlackNotification(DocumentDetails documentDetails, CancellationToken cancellationToken)
+    private async Task AddDocumentLabels(DocumentDetails documentDetails, CancellationToken cancellationToken)
+    {
+        var formKiqBaseUrl = Environment.GetEnvironmentVariable("FORMKIQ_BASE_URL");
+        var formKiqApiKey = Environment.GetEnvironmentVariable("FORMKIQ_API_KEY");
+
+        if (string.IsNullOrEmpty(formKiqBaseUrl) || string.IsNullOrEmpty(formKiqApiKey))
+        {
+            Logger.LogWarning("FormKiQ base URL or API key not set");
+            return;
+        }
+        
+        var client = _httpClientFactory.CreateClient();
+        client.BaseAddress = new(formKiqBaseUrl);
+        client.DefaultRequestHeaders.Authorization = new(formKiqApiKey);
+
+        var url = $"documents/{documentDetails.DocumentId}/attributes";
+
+        var attributes = new Attribute
+        {
+            StringValues = ["cat", "dog"]
+        };
+
+        var root = new Root
+        {
+            Attributes = [attributes]
+        };
+        
+        var response = await client.PostAsJsonAsync(url, root, cancellationToken);
+        
+        if (response.IsSuccessStatusCode)
+        {
+            Logger.LogInformation("FormKiQ attributes set {StatusCode}", response.StatusCode);
+
+            return;
+        }
+        
+        Logger.LogError("FormKiQ post failed {@Response}", response);
+    }
+
+    private async Task SendSlackNotification(DocumentDetails documentDetails, CancellationToken cancellationToken)
     {
         var slackWebhookUrl = Environment.GetEnvironmentVariable("SLACK_WEBHOOK_URL");
 
@@ -60,7 +109,7 @@ public class Handler : ISqsRecordHandler
             text = $"New document <{documentDetails.Url}|{documentDetails.DocumentId}> uploaded"
         };
 
-        var client = new HttpClient();
+        var client = _httpClientFactory.CreateClient();
         var response = await client.PostAsJsonAsync(slackWebhookUrl, json, cancellationToken: cancellationToken);
 
         if (response.IsSuccessStatusCode)
@@ -71,5 +120,20 @@ public class Handler : ISqsRecordHandler
         }
 
         Logger.LogError("Slack message failed {@Response}", response);
+    }
+    
+    public class Attribute
+    {
+        [JsonPropertyName("key")]
+        public string Key { get; set; } = "labels";
+        
+        [JsonPropertyName("stringValues")]
+        public List<string> StringValues { get; set; }
+    }
+
+    public class Root
+    {
+        [JsonPropertyName("attributes")]
+        public List<Attribute> Attributes { get; set; }
     }
 }
