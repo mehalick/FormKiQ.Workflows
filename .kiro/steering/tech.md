@@ -1,7 +1,7 @@
 # Technology Stack
 
 ## Framework & Runtime
-- .NET 8.0 (net8.0)
+- .NET 10.0 (net10.0)
 - C# with latest language version
 - Implicit usings enabled
 - Nullable reference types enabled
@@ -19,6 +19,8 @@
 - Amazon.Lambda.Serialization.SystemTextJson 2.4.4
 - AWS.Lambda.Powertools.BatchProcessing 3.0.1
 - AWS.Lambda.Powertools.Logging 3.0.1
+- Microsoft.Extensions.DependencyInjection 9.0.0
+- Microsoft.Extensions.Http 9.0.0
 - JetBrains.Annotations 2025.2.2
 
 ## Package Management
@@ -60,7 +62,14 @@ cdk deploy
 ```
 
 ### Lambda Deployment
-Lambda functions are packaged as Docker images and deployed via CDK infrastructure.
+Lambda functions are packaged as Docker container images and deployed via CDK infrastructure.
+
+The Dockerfile uses multi-stage builds:
+- Build stage: Uses .NET 10 SDK to compile and publish the Lambda function
+- Final stage: Uses AWS Lambda .NET 10 base image with published artifacts
+- Runtime: linux-x64 with PublishReadyToRun enabled for faster cold starts
+
+Container images are automatically built and pushed to Amazon ECR during CDK deployment.
 
 ## Development Tools
 - Visual Studio 2017+ (solution format v12.00)
