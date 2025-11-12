@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
         <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
         <AWSProjectType>Lambda</AWSProjectType>
         <!-- This property makes the build directory similar to a publish directory and helps the AWS .NET Lambda Mock Test Tool find project dependencies. -->
@@ -8,13 +12,13 @@
         <PublishReadyToRun>true</PublishReadyToRun>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Amazon.Lambda.Core" />
-        <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" />
-        <PackageReference Include="Amazon.Lambda.SQSEvents" />
-        <PackageReference Include="AWS.Lambda.Powertools.BatchProcessing" />
-        <PackageReference Include="AWS.Lambda.Powertools.Logging" />
-        <PackageReference Include="JetBrains.Annotations" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-        <PackageReference Include="Microsoft.Extensions.Http" />
+        <PackageReference Include="Amazon.Lambda.Core" Version="2.7.1" />
+        <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.4" />
+        <PackageReference Include="Amazon.Lambda.SQSEvents" Version="2.2.0" />
+        <PackageReference Include="AWS.Lambda.Powertools.BatchProcessing" Version="3.0.1" />
+        <PackageReference Include="AWS.Lambda.Powertools.Logging" Version="3.0.1" />
+        <PackageReference Include="JetBrains.Annotations" Version="2025.2.2" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
     </ItemGroup>
 </Project>

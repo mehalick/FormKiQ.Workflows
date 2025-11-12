@@ -49,7 +49,7 @@ public class InfraStack : Stack
     private Function CreateOnDocumentCreatedFunction(IConfiguration configuration)
     {
         const string project = "FormKiQ.Workflows.OnDocumentCreated";
-        const string folder = $"../apps/{project}/bin/Release/net8.0";
+        const string dockerfilePath = $"../apps/{project}";
         const string handler = $"{project}::{project}.Function::FunctionHandler";
         
         var formKiqBaseUrl = configuration["FormKiQ:BaseUrl"];
@@ -76,12 +76,15 @@ public class InfraStack : Stack
         return new(this, "OnDocumentCreated",
             new FunctionProps
             {
-                Code = Code.FromAsset(folder),
+                Code = Code.FromAssetImage(dockerfilePath, new AssetImageCodeProps
+                {
+                    Cmd = [handler]
+                }),
                 Description = "FormKiQ workflow to run on document created.",
-                Handler = handler,
+                Handler = Handler.FROM_IMAGE,
+                Runtime = Runtime.FROM_IMAGE,
                 MemorySize = 256,
-                Runtime = Runtime.DOTNET_8,
-                Architecture = Architecture.ARM_64,
+                Architecture = Architecture.X86_64,
                 Timeout = Duration.Seconds(30),
                 LoggingFormat = LoggingFormat.JSON,
                 LogGroup = new LogGroup(this, "OnDocumentCreatedLogGroup", new LogGroupProps

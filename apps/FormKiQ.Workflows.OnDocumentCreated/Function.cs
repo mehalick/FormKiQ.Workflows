@@ -33,8 +33,8 @@ public class Function
         Logger.LogDebug("Function handler started");
 
         var result = await _processor.ProcessAsync(sqsEvent, _handler);
-        
-        Logger.LogDebug("Function handler complete");
+
+        Logger.LogDebug("Function handler completed");
 
         return result.BatchItemFailuresResponse;
     }

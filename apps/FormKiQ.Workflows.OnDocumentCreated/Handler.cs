@@ -1,5 +1,4 @@
-﻿using System.Net.Http.Headers;
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Amazon.Lambda.SQSEvents;
@@ -20,7 +19,7 @@ public class Handler : ISqsRecordHandler
 
     public async Task<RecordHandlerResult> HandleAsync(SQSEvent.SQSMessage record, CancellationToken cancellationToken)
     {
-        Logger.LogInformation($"Handling SQS record {record.MessageId}");
+        Logger.LogInformation("Handling SQS record {MessageId}", record.MessageId);
 
         try
         {
@@ -72,12 +71,12 @@ public class Handler : ISqsRecordHandler
 
         var url = $"documents/{documentDetails.DocumentId}/attributes";
 
-        var attributes = new Attribute
+        var attributes = new LabelAttribute
         {
             StringValues = ["cat", "dog"]
         };
 
-        var root = new Root
+        var root = new AttributeList
         {
             Attributes = [attributes]
         };
@@ -121,19 +120,19 @@ public class Handler : ISqsRecordHandler
 
         Logger.LogError("Slack message failed {@Response}", response);
     }
-    
-    public class Attribute
+
+    private class LabelAttribute
     {
         [JsonPropertyName("key")]
-        public string Key { get; set; } = "labels";
-        
+        public string Key { get; init; } = "labels";
+
         [JsonPropertyName("stringValues")]
-        public List<string> StringValues { get; set; }
+        public List<string> StringValues { get; init; } = [];
     }
 
-    public class Root
+    private class AttributeList
     {
         [JsonPropertyName("attributes")]
-        public List<Attribute> Attributes { get; set; }
+        public List<LabelAttribute> Attributes { get; init; } = [];
     }
 }
