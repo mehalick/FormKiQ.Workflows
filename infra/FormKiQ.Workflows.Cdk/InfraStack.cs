@@ -1,4 +1,5 @@
 using Amazon.CDK;
+using Amazon.CDK.AWS.IAM;
 using Amazon.CDK.AWS.Lambda;
 using Amazon.CDK.AWS.Lambda.EventSources;
 using Amazon.CDK.AWS.Logs;
@@ -15,6 +16,7 @@ public class InfraStack : Stack
     internal InfraStack(Construct scope, string id, IConfiguration configuration, IStackProps props) : base(scope, id, props)
     {
         var snsTopicArn = configuration["AWS:SnsTopicArn"];
+        var s3BucketName = configuration["AWS:S3BucketName"];
         
         if (string.IsNullOrWhiteSpace(snsTopicArn))
         {
@@ -26,6 +28,48 @@ public class InfraStack : Stack
 
         var function = CreateOnDocumentCreatedFunction(configuration);
         function.AddEventSource(new SqsEventSource(queue, new SqsEventSourceProps()));
+        
+        // Grant XRay permissions
+        function.AddToRolePolicy(new(new PolicyStatementProps
+        {
+            Effect = Effect.ALLOW,
+            Actions =
+            [
+                "xray:PutTelemetryRecords",
+                "xray:PutTraceSegments"
+            ],
+            Resources = ["*"]
+        }));
+                
+        // Grant Rekognition permissions
+        function.AddToRolePolicy(new(new PolicyStatementProps
+        {
+            Effect = Effect.ALLOW,
+            Actions =
+            [
+                "rekognition:DetectLabels",
+                "rekognition:DetectFaces",
+                "rekognition:DetectText",
+                "rekognition:DetectModerationLabels",
+                "rekognition:RecognizeCelebrities"
+            ],
+            Resources = ["*"]
+        }));
+        
+        // Grant S3 read permissions for Rekognition to access images
+        if (!string.IsNullOrWhiteSpace(s3BucketName))
+        {
+            function.AddToRolePolicy(new(new PolicyStatementProps
+            {
+                Effect = Effect.ALLOW,
+                Actions =
+                [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion"
+                ],
+                Resources = [$"arn:aws:s3:::{s3BucketName}/*"]
+            }));
+        }
     }
 
     private Queue CreateQueueWithSnsSubscription(string queueName, ITopic snsTopic)

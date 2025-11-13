@@ -2,6 +2,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Amazon.Lambda.SQSEvents;
+using Amazon.Rekognition;
+using Amazon.Rekognition.Model;
 using AWS.Lambda.Powertools.BatchProcessing;
 using AWS.Lambda.Powertools.BatchProcessing.Sqs;
 using AWS.Lambda.Powertools.Logging;
@@ -11,10 +13,12 @@ namespace FormKiQ.Workflows.OnDocumentCreated;
 public class Handler : ISqsRecordHandler
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IAmazonRekognition _rekognitionClient;
 
-    public Handler(IHttpClientFactory httpClientFactory)
+    public Handler(IHttpClientFactory httpClientFactory, IAmazonRekognition rekognitionClient)
     {
         _httpClientFactory = httpClientFactory;
+        _rekognitionClient = rekognitionClient;
     }
 
     public async Task<RecordHandlerResult> HandleAsync(SQSEvent.SQSMessage record, CancellationToken cancellationToken)
@@ -41,8 +45,8 @@ public class Handler : ISqsRecordHandler
                 {
                     Logger.LogInformation("Document successfully deserialized {@Document}", documentDetails);
                     
-                    await AddDocumentLabels(documentDetails, cancellationToken);
-                    await SendSlackNotification(documentDetails, cancellationToken);
+                    var labels = await AddDocumentLabels(documentDetails, cancellationToken);
+                    await SendSlackNotification(documentDetails, labels, cancellationToken);
                 }
             }
         }
@@ -54,46 +58,85 @@ public class Handler : ISqsRecordHandler
         return await Task.FromResult(RecordHandlerResult.None);
     }
 
-    private async Task AddDocumentLabels(DocumentDetails documentDetails, CancellationToken cancellationToken)
+    private async Task<List<string>> AddDocumentLabels(DocumentDetails documentDetails, CancellationToken cancellationToken)
     {
+        var labels = new List<string>();
+        
+        try
+        {
+            var request = new DetectLabelsRequest
+            {
+                Image = new()
+                {
+                    S3Object = new()
+                    {
+                        Bucket = documentDetails.S3Bucket,
+                        Name = documentDetails.S3Key
+                    }
+                },
+                MaxLabels = 10,
+                MinConfidence = 75F
+            };
+        
+            var detectLabelResponse = await _rekognitionClient.DetectLabelsAsync(request, cancellationToken);
+            
+            if (detectLabelResponse.Labels.Count == 0)
+            {
+                Logger.LogInformation("No labels detected");
+                return labels;
+            }
+
+            foreach (var label in detectLabelResponse.Labels)
+            {
+                Logger.LogInformation("Detecting label {@Label}", label);
+                Logger.LogInformation("Detecting label {Label} {Confidence}", label.Name, label.Confidence);
+                
+                labels.Add(label.Name);
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error using Rekognition");
+        }
+        
         var formKiqBaseUrl = Environment.GetEnvironmentVariable("FORMKIQ_BASE_URL");
         var formKiqApiKey = Environment.GetEnvironmentVariable("FORMKIQ_API_KEY");
 
         if (string.IsNullOrEmpty(formKiqBaseUrl) || string.IsNullOrEmpty(formKiqApiKey))
         {
             Logger.LogWarning("FormKiQ base URL or API key not set");
-            return;
+            return labels;
         }
-        
+
         var client = _httpClientFactory.CreateClient();
         client.BaseAddress = new(formKiqBaseUrl);
         client.DefaultRequestHeaders.Authorization = new(formKiqApiKey);
 
         var url = $"documents/{documentDetails.DocumentId}/attributes";
 
-        var attributes = new LabelAttribute
+        var attributes = new AttributeList
         {
-            StringValues = ["cat", "dog"]
-        };
-
-        var root = new AttributeList
-        {
-            Attributes = [attributes]
+            Attributes = [new()
+            {
+                StringValues = labels
+            }]
         };
         
-        var response = await client.PostAsJsonAsync(url, root, cancellationToken);
+        var response = await client.PostAsJsonAsync(url, attributes, cancellationToken);
         
         if (response.IsSuccessStatusCode)
         {
             Logger.LogInformation("FormKiQ attributes set {StatusCode}", response.StatusCode);
-
-            return;
         }
-        
-        Logger.LogError("FormKiQ post failed {@Response}", response);
+        else
+        {
+            Logger.LogError("FormKiQ post failed {@Response}", response);
+        }
+
+        return labels;
     }
 
-    private async Task SendSlackNotification(DocumentDetails documentDetails, CancellationToken cancellationToken)
+    private async Task SendSlackNotification(DocumentDetails documentDetails, List<string> labels, CancellationToken cancellationToken)
     {
         var slackWebhookUrl = Environment.GetEnvironmentVariable("SLACK_WEBHOOK_URL");
 
@@ -103,9 +146,11 @@ public class Handler : ISqsRecordHandler
             return;
         }
 
+        var labelList = string.Join(", ", labels);
+
         var json = new
         {
-            text = $"New document <{documentDetails.Url}|{documentDetails.DocumentId}> uploaded"
+            text = $"New document <{documentDetails.Url}|{documentDetails.Path}> uploaded, labels: {labelList}"
         };
 
         var client = _httpClientFactory.CreateClient();
