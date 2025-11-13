@@ -1,6 +1,4 @@
-﻿using System.Text.Json.Serialization;
-
-namespace FormKiQ.Workflows.OnDocumentCreated;
+﻿namespace FormKiQ.Workflows.OnDocumentCreated.Models;
 
 public record DocumentDetails(
     string SiteId,

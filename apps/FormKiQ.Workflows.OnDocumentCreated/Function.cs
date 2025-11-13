@@ -23,7 +23,7 @@ public class Function
     {
         Logger.AppendKey("type", "function.log");
         Logger.LogDebug("Initializing function in static constructor");
-        
+
         _serviceProvider = Startup.ConfigureServices();
     }
 

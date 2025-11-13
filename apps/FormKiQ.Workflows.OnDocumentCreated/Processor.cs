@@ -7,7 +7,9 @@ namespace FormKiQ.Workflows.OnDocumentCreated;
 
 internal class Processor : SqsBatchProcessor
 {
-    public override Task<ProcessingResult<SQSEvent.SQSMessage>> ProcessAsync(SQSEvent @event, IRecordHandler<SQSEvent.SQSMessage> recordHandler, ProcessingOptions processingOptions)
+    public override Task<ProcessingResult<SQSEvent.SQSMessage>> ProcessAsync(
+        SQSEvent @event, IRecordHandler<SQSEvent.SQSMessage> recordHandler,
+        ProcessingOptions processingOptions)
     {
         Logger.LogInformation("Processing {EventCount} record(s)", @event.Records.Count);
         return base.ProcessAsync(@event, recordHandler, processingOptions);

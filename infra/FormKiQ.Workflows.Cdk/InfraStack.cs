@@ -18,9 +18,9 @@ public class InfraStack : Stack
         var snsTopicArn = configuration["AWS:SnsTopicArn"];
         var s3BucketName = configuration["AWS:S3BucketName"];
         
-        if (string.IsNullOrWhiteSpace(snsTopicArn))
+        if (string.IsNullOrWhiteSpace(snsTopicArn) || string.IsNullOrWhiteSpace(s3BucketName))
         {
-            throw new("SNS Topic ARN is missing");
+            throw new("SNS topic ARN or S3 bucket name are missing");
         }
         
         var topic = Topic.FromTopicArn(this, "SnsDocumentEventTopic", snsTopicArn);
@@ -28,7 +28,7 @@ public class InfraStack : Stack
 
         var function = CreateOnDocumentCreatedFunction(configuration);
         function.AddEventSource(new SqsEventSource(queue, new SqsEventSourceProps()));
-        
+
         // Grant XRay permissions
         function.AddToRolePolicy(new(new PolicyStatementProps
         {
@@ -40,7 +40,7 @@ public class InfraStack : Stack
             ],
             Resources = ["*"]
         }));
-                
+
         // Grant Rekognition permissions
         function.AddToRolePolicy(new(new PolicyStatementProps
         {
@@ -55,7 +55,7 @@ public class InfraStack : Stack
             ],
             Resources = ["*"]
         }));
-        
+
         // Grant S3 read permissions for Rekognition to access images
         if (!string.IsNullOrWhiteSpace(s3BucketName))
         {

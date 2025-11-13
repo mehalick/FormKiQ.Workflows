@@ -1,12 +1,12 @@
 ﻿using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Amazon.Lambda.SQSEvents;
 using Amazon.Rekognition;
 using Amazon.Rekognition.Model;
 using AWS.Lambda.Powertools.BatchProcessing;
 using AWS.Lambda.Powertools.BatchProcessing.Sqs;
 using AWS.Lambda.Powertools.Logging;
+using FormKiQ.Workflows.OnDocumentCreated.Models;
 
 namespace FormKiQ.Workflows.OnDocumentCreated;
 
@@ -27,38 +27,49 @@ public class Handler : ISqsRecordHandler
 
         try
         {
-            var documentMessage = JsonSerializer.Deserialize(record.Body, Serializer.Default.DocumentMessage);
+            var document = GetDocumentDetails(record.Body);
 
-            if (documentMessage is null)
+            if (document is not null)
             {
-                Logger.LogError("Unable to deserialize document message");
-            }
-            else
-            {
-                var documentDetails = JsonSerializer.Deserialize(documentMessage.Message, Serializer.Default.DocumentDetails);
-
-                if (documentDetails is null)
-                {
-                    Logger.LogError("Unable to deserialize document details");
-                }
-                else
-                {
-                    Logger.LogInformation("Document successfully deserialized {@Document}", documentDetails);
-                    
-                    var labels = await AddDocumentLabels(documentDetails, cancellationToken);
-                    await SendSlackNotification(documentDetails, labels, cancellationToken);
-                }
+                var labels = await GetDocumentLabels(document, cancellationToken);
+                await SetDocumentLabels(document, labels, cancellationToken);
+                await SendSlackNotification(document, labels, cancellationToken);
             }
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Logger.LogError(e);
+            Logger.LogError(ex, "Error processing SQS record: {ErrorMessage}", ex.Message);
         }
 
-        return await Task.FromResult(RecordHandlerResult.None);
+        return RecordHandlerResult.None;
+    }
+    
+    private static DocumentDetails? GetDocumentDetails(string json)
+    {
+        var message = JsonSerializer.Deserialize(json, Serializer.Default.DocumentMessage);
+
+        if (message is null)
+        {
+            Logger.LogError("Unable to deserialize document message");
+                
+            return null;
+        }
+
+        var document = JsonSerializer.Deserialize(message.Message, Serializer.Default.DocumentDetails);
+
+        if (document is null)
+        {
+            Logger.LogError("Unable to deserialize document details");
+                
+            return null;
+        }
+
+        Logger.LogInformation("Document successfully deserialized {@Document}", document);
+        
+        return document;
     }
 
-    private async Task<List<string>> AddDocumentLabels(DocumentDetails documentDetails, CancellationToken cancellationToken)
+    private async Task<List<string>> GetDocumentLabels(DocumentDetails documentDetails, CancellationToken cancellationToken)
     {
         var labels = new List<string>();
         
@@ -83,20 +94,29 @@ public class Handler : ISqsRecordHandler
             if (detectLabelResponse.Labels.Count == 0)
             {
                 Logger.LogInformation("No labels detected");
-                return labels;
+                return [];
             }
 
             foreach (var label in detectLabelResponse.Labels)
             {
                 Logger.LogInformation("Detecting label {@Label}", label);
-                Logger.LogInformation("Detecting label {Label} {Confidence}", label.Name, label.Confidence);
                 
                 labels.Add(label.Name);
             }
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Logger.LogError(e, "Error using Rekognition");
+            Logger.LogError(ex, "Error using Rekognition: {ErrorMessage}", ex.Message);
+        }
+
+        return labels;
+    }
+
+    private async Task SetDocumentLabels(DocumentDetails document, List<string> labels, CancellationToken cancellationToken)
+    {
+        if (labels.Count == 0)
+        {
+            return;
         }
         
         var formKiqBaseUrl = Environment.GetEnvironmentVariable("FORMKIQ_BASE_URL");
@@ -105,23 +125,15 @@ public class Handler : ISqsRecordHandler
         if (string.IsNullOrEmpty(formKiqBaseUrl) || string.IsNullOrEmpty(formKiqApiKey))
         {
             Logger.LogWarning("FormKiQ base URL or API key not set");
-            return labels;
+            return;
         }
-
+        
         var client = _httpClientFactory.CreateClient();
         client.BaseAddress = new(formKiqBaseUrl);
         client.DefaultRequestHeaders.Authorization = new(formKiqApiKey);
 
-        var url = $"documents/{documentDetails.DocumentId}/attributes";
-
-        var attributes = new AttributeList
-        {
-            Attributes = [new()
-            {
-                StringValues = labels
-            }]
-        };
-        
+        var url = $"documents/{document.DocumentId}/attributes";
+        var attributes = LabelAttributeList.Create(labels);
         var response = await client.PostAsJsonAsync(url, attributes, cancellationToken);
         
         if (response.IsSuccessStatusCode)
@@ -132,8 +144,6 @@ public class Handler : ISqsRecordHandler
         {
             Logger.LogError("FormKiQ post failed {@Response}", response);
         }
-
-        return labels;
     }
 
     private async Task SendSlackNotification(DocumentDetails documentDetails, List<string> labels, CancellationToken cancellationToken)
@@ -159,25 +169,10 @@ public class Handler : ISqsRecordHandler
         if (response.IsSuccessStatusCode)
         {
             Logger.LogInformation("Slack message sent {StatusCode}", response.StatusCode);
-
-            return;
         }
-
-        Logger.LogError("Slack message failed {@Response}", response);
-    }
-
-    private class LabelAttribute
-    {
-        [JsonPropertyName("key")]
-        public string Key { get; init; } = "labels";
-
-        [JsonPropertyName("stringValues")]
-        public List<string> StringValues { get; init; } = [];
-    }
-
-    private class AttributeList
-    {
-        [JsonPropertyName("attributes")]
-        public List<LabelAttribute> Attributes { get; init; } = [];
+        else
+        {
+            Logger.LogError("Slack message failed {@Response}", response);
+        }
     }
 }
