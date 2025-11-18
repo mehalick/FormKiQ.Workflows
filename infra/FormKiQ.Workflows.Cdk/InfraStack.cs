@@ -3,6 +3,7 @@ using Amazon.CDK.AWS.IAM;
 using Amazon.CDK.AWS.Lambda;
 using Amazon.CDK.AWS.Lambda.EventSources;
 using Amazon.CDK.AWS.Logs;
+using Amazon.CDK.AWS.S3;
 using Amazon.CDK.AWS.SNS;
 using Amazon.CDK.AWS.SNS.Subscriptions;
 using Amazon.CDK.AWS.SQS;
@@ -11,7 +12,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace FormKiQ.Workflows.Cdk;
 
-public class InfraStack : Stack
+public sealed class InfraStack : Stack
 {
     internal InfraStack(Construct scope, string id, IConfiguration configuration, IStackProps props) : base(scope, id, props)
     {
@@ -23,10 +24,29 @@ public class InfraStack : Stack
             throw new("SNS topic ARN or S3 bucket name are missing");
         }
 
+        // Create S3 bucket for resized images
+        var resizeBucket = new Bucket(this, "ResizeBucket", new BucketProps
+        {
+            BucketName = $"formkiq-workflows-resize-{Account}",
+            RemovalPolicy = RemovalPolicy.RETAIN,
+            Versioned = false,
+            PublicReadAccess = false,
+            BlockPublicAccess = BlockPublicAccess.BLOCK_ALL,
+            Encryption = BucketEncryption.S3_MANAGED,
+            LifecycleRules =
+            [
+                new LifecycleRule
+                {
+                    Enabled = true,
+                    Expiration = Duration.Days(30)
+                }
+            ]
+        });
+
         var topic = Topic.FromTopicArn(this, "SnsDocumentEventTopic", snsTopicArn);
         var queue = CreateQueueWithSnsSubscription("DocumentCreatedQueue", topic);
 
-        var function = CreateOnDocumentCreatedFunction(configuration);
+        var function = CreateOnDocumentCreatedFunction(configuration, resizeBucket.BucketName);
         function.AddEventSource(new SqsEventSource(queue, new SqsEventSourceProps()));
 
         // Grant XRay permissions
@@ -69,19 +89,19 @@ public class InfraStack : Stack
         }));
 
         // Grant S3 read permissions for Rekognition to access images
-        if (!string.IsNullOrWhiteSpace(s3BucketName))
+        function.AddToRolePolicy(new(new PolicyStatementProps
         {
-            function.AddToRolePolicy(new(new PolicyStatementProps
-            {
-                Effect = Effect.ALLOW,
-                Actions =
-                [
-                    "s3:GetObject",
-                    "s3:GetObjectVersion"
-                ],
-                Resources = [$"arn:aws:s3:::{s3BucketName}/*"]
-            }));
-        }
+            Effect = Effect.ALLOW,
+            Actions =
+            [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+            ],
+            Resources = [$"arn:aws:s3:::{s3BucketName}/*"]
+        }));
+
+        // Grant S3 write permissions to resize bucket
+        resizeBucket.GrantReadWrite(function);
     }
 
     private Queue CreateQueueWithSnsSubscription(string queueName, ITopic snsTopic)
@@ -102,7 +122,7 @@ public class InfraStack : Stack
         return queue;
     }
 
-    private Function CreateOnDocumentCreatedFunction(IConfiguration configuration)
+    private Function CreateOnDocumentCreatedFunction(IConfiguration configuration, string resizeBucketName)
     {
         const string project = "FormKiQ.Workflows.OnDocumentCreated";
         const string dockerfilePath = $"../apps/{project}";
@@ -153,7 +173,8 @@ public class InfraStack : Stack
                 {
                     { "SLACK_WEBHOOK_URL", slackWebhookUrl },
                     { "FORMKIQ_BASE_URL", formKiqBaseUrl },
-                    { "FORMKIQ_API_KEY", formKiQApiKey }
+                    { "FORMKIQ_API_KEY", formKiQApiKey },
+                    { "RESIZE_BUCKET_NAME", resizeBucketName }
                 }
             });
     }

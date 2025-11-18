@@ -12,18 +12,20 @@
         <PublishReadyToRun>true</PublishReadyToRun>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Amazon.JSII.Runtime" Version="1.118.0" />
+        <PackageReference Include="Amazon.JSII.Runtime" Version="1.119.0" />
         <PackageReference Include="Amazon.Lambda.Core" Version="2.8.0" />
         <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.4.4" />
         <PackageReference Include="Amazon.Lambda.SQSEvents" Version="2.2.0" />
         <PackageReference Include="AWS.Lambda.Powertools.BatchProcessing" Version="3.0.2" />
         <PackageReference Include="AWS.Lambda.Powertools.Logging" Version="3.0.2" />
-        <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.3.11" />
-        <PackageReference Include="AWSSDK.Rekognition" Version="4.0.3.2" />
+        <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.3.12" />
+        <PackageReference Include="AWSSDK.Rekognition" Version="4.0.3.3" />
+        <PackageReference Include="AWSSDK.S3" Version="4.0.11.3" />
         <PackageReference Include="AWSSDK.Textract" Version="4.0.3.3" />
         <PackageReference Include="JetBrains.Annotations" Version="2025.2.2" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     </ItemGroup>
     <ItemGroup>
       <Folder Include="Services\" />

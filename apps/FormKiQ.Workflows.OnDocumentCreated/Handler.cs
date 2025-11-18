@@ -4,13 +4,18 @@ using System.Text.Json;
 using Amazon.Lambda.SQSEvents;
 using Amazon.Rekognition;
 using Amazon.Rekognition.Model;
+using Amazon.S3;
+using Amazon.S3.Model;
 using Amazon.Textract;
 using Amazon.Textract.Model;
 using AWS.Lambda.Powertools.BatchProcessing;
 using AWS.Lambda.Powertools.BatchProcessing.Sqs;
 using AWS.Lambda.Powertools.Logging;
 using FormKiQ.Workflows.OnDocumentCreated.Models;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
 using Document = Amazon.Textract.Model.Document;
+using Image = SixLabors.ImageSharp.Image;
 
 namespace FormKiQ.Workflows.OnDocumentCreated;
 
@@ -18,12 +23,14 @@ public class Handler : ISqsRecordHandler
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IAmazonRekognition _rekognitionClient;
+    private readonly IAmazonS3 _s3Client;
     private readonly IAmazonTextract _textractClient;
 
-    public Handler(IHttpClientFactory httpClientFactory, IAmazonRekognition rekognitionClient, IAmazonTextract textractClient)
+    public Handler(IHttpClientFactory httpClientFactory, IAmazonRekognition rekognitionClient, IAmazonS3 s3Client, IAmazonTextract textractClient)
     {
         _httpClientFactory = httpClientFactory;
         _rekognitionClient = rekognitionClient;
+        _s3Client = s3Client;
         _textractClient = textractClient;
     }
 
@@ -37,10 +44,11 @@ public class Handler : ISqsRecordHandler
 
             if (document is not null && document.Type == "create")
             {
-                    var labels = await GetDocumentLabels(document, cancellationToken);
-                    var words = await GetDocumentText(document, cancellationToken);
-                    await SetDocumentLabels(document, labels, cancellationToken);
-                    await SendSlackNotification(document, labels, cancellationToken);
+                await ResizeImage(document, cancellationToken);
+                var labels = await GetDocumentLabels(document, cancellationToken);
+                var words = await GetDocumentText(document, cancellationToken);
+                await SetDocumentLabels(document, labels, cancellationToken);
+                await SendSlackNotification(document, labels, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -74,6 +82,61 @@ public class Handler : ISqsRecordHandler
         Logger.LogInformation("<Handler> Document successfully deserialized {@Document}", document);
 
         return document;
+    }
+
+    private async Task ResizeImage(DocumentDetails document, CancellationToken cancellationToken)
+    {
+        try
+        {
+            Logger.LogInformation("<Handler> Starting image resize for document {DocumentId}", document.DocumentId);
+
+            // Get the resize bucket name from environment variable
+            var resizeBucketName = Environment.GetEnvironmentVariable("RESIZE_BUCKET_NAME");
+            if (string.IsNullOrWhiteSpace(resizeBucketName))
+            {
+                Logger.LogError("<Handler> RESIZE_BUCKET_NAME environment variable not set");
+                return;
+            }
+
+            // Download the TIF image from S3
+            var getObjectRequest = new GetObjectRequest
+            {
+                BucketName = document.S3Bucket,
+                Key = document.S3Key
+            };
+
+            using var getObjectResponse = await _s3Client.GetObjectAsync(getObjectRequest, cancellationToken);
+            await using var responseStream = getObjectResponse.ResponseStream;
+
+            // Load the image using ImageSharp
+            using var image = await Image.LoadAsync(responseStream, cancellationToken);
+
+            // Convert to PNG and save to memory stream
+            await using var pngStream = new MemoryStream();
+            await image.SaveAsync(pngStream, new PngEncoder(), cancellationToken);
+            pngStream.Position = 0;
+
+            // Generate new key with .png extension
+            var newKey = Path.ChangeExtension(document.S3Key, ".png");
+
+            // Upload the PNG image to the resize bucket
+            var putObjectRequest = new PutObjectRequest
+            {
+                BucketName = resizeBucketName,
+                Key = newKey,
+                InputStream = pngStream,
+                ContentType = "image/png"
+            };
+
+            var putObjectResponse = await _s3Client.PutObjectAsync(putObjectRequest, cancellationToken);
+
+            Logger.LogInformation("<Handler> Image converted and uploaded successfully. StatusCode: {StatusCode}, Key: {Key}",
+                putObjectResponse.HttpStatusCode, newKey);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "<Handler> Error resizing image: {ErrorMessage}", ex.Message);
+        }
     }
 
     private async Task<List<string>> GetDocumentLabels(DocumentDetails document, CancellationToken cancellationToken)
