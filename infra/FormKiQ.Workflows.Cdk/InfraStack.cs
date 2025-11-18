@@ -17,12 +17,12 @@ public class InfraStack : Stack
     {
         var snsTopicArn = configuration["AWS:SnsTopicArn"];
         var s3BucketName = configuration["AWS:S3BucketName"];
-        
+
         if (string.IsNullOrWhiteSpace(snsTopicArn) || string.IsNullOrWhiteSpace(s3BucketName))
         {
             throw new("SNS topic ARN or S3 bucket name are missing");
         }
-        
+
         var topic = Topic.FromTopicArn(this, "SnsDocumentEventTopic", snsTopicArn);
         var queue = CreateQueueWithSnsSubscription("DocumentCreatedQueue", topic);
 
@@ -52,6 +52,18 @@ public class InfraStack : Stack
                 "rekognition:DetectText",
                 "rekognition:DetectModerationLabels",
                 "rekognition:RecognizeCelebrities"
+            ],
+            Resources = ["*"]
+        }));
+
+        // Grant Textract permissions
+        function.AddToRolePolicy(new(new PolicyStatementProps
+        {
+            Effect = Effect.ALLOW,
+            Actions =
+            [
+                "textract:DetectDocumentText",
+                "textract:AnalyzeDocument"
             ],
             Resources = ["*"]
         }));
@@ -95,21 +107,21 @@ public class InfraStack : Stack
         const string project = "FormKiQ.Workflows.OnDocumentCreated";
         const string dockerfilePath = $"../apps/{project}";
         const string handler = $"{project}::{project}.Function::FunctionHandler";
-        
+
         var formKiqBaseUrl = configuration["FormKiQ:BaseUrl"];
-        
+
         if (string.IsNullOrWhiteSpace(formKiqBaseUrl))
         {
             throw new("FormKiQ API URL is missing");
         }
-        
+
         var formKiQApiKey = configuration["FormKiQ:ApiKey"];
 
         if (string.IsNullOrWhiteSpace(formKiQApiKey))
         {
             throw new("FormKiQ API Key is missing");
         }
-        
+
         var slackWebhookUrl = configuration["Slack:WebhookUrl"];
 
         if (string.IsNullOrWhiteSpace(slackWebhookUrl))

@@ -20,8 +20,12 @@
         <PackageReference Include="AWS.Lambda.Powertools.Logging" Version="3.0.2" />
         <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.3.11" />
         <PackageReference Include="AWSSDK.Rekognition" Version="4.0.3.2" />
+        <PackageReference Include="AWSSDK.Textract" Version="4.0.3.3" />
         <PackageReference Include="JetBrains.Annotations" Version="2025.2.2" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    </ItemGroup>
+    <ItemGroup>
+      <Folder Include="Services\" />
     </ItemGroup>
 </Project>

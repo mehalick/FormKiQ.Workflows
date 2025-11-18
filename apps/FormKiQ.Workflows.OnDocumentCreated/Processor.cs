@@ -11,7 +11,7 @@ internal class Processor : SqsBatchProcessor
         SQSEvent @event, IRecordHandler<SQSEvent.SQSMessage> recordHandler,
         ProcessingOptions processingOptions)
     {
-        Logger.LogInformation("Processing {EventCount} record(s)", @event.Records.Count);
+        Logger.LogDebug("Processing {EventCount} record(s)", @event.Records.Count);
         return base.ProcessAsync(@event, recordHandler, processingOptions);
     }
 
