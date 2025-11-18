@@ -1,12 +1,16 @@
 ﻿using System.Net.Http.Json;
+using System.Reflection.Metadata;
 using System.Text.Json;
 using Amazon.Lambda.SQSEvents;
 using Amazon.Rekognition;
 using Amazon.Rekognition.Model;
+using Amazon.Textract;
+using Amazon.Textract.Model;
 using AWS.Lambda.Powertools.BatchProcessing;
 using AWS.Lambda.Powertools.BatchProcessing.Sqs;
 using AWS.Lambda.Powertools.Logging;
 using FormKiQ.Workflows.OnDocumentCreated.Models;
+using Document = Amazon.Textract.Model.Document;
 
 namespace FormKiQ.Workflows.OnDocumentCreated;
 
@@ -14,44 +18,47 @@ public class Handler : ISqsRecordHandler
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IAmazonRekognition _rekognitionClient;
+    private readonly IAmazonTextract _textractClient;
 
-    public Handler(IHttpClientFactory httpClientFactory, IAmazonRekognition rekognitionClient)
+    public Handler(IHttpClientFactory httpClientFactory, IAmazonRekognition rekognitionClient, IAmazonTextract textractClient)
     {
         _httpClientFactory = httpClientFactory;
         _rekognitionClient = rekognitionClient;
+        _textractClient = textractClient;
     }
 
     public async Task<RecordHandlerResult> HandleAsync(SQSEvent.SQSMessage record, CancellationToken cancellationToken)
     {
-        Logger.LogInformation("Handling SQS record {MessageId}", record.MessageId);
+        Logger.LogInformation("<Handler> Handling SQS record {MessageId}", record.MessageId);
 
         try
         {
             var document = GetDocumentDetails(record.Body);
 
-            if (document is not null)
+            if (document is not null && document.Type == "create")
             {
-                var labels = await GetDocumentLabels(document, cancellationToken);
-                await SetDocumentLabels(document, labels, cancellationToken);
-                await SendSlackNotification(document, labels, cancellationToken);
+                    var labels = await GetDocumentLabels(document, cancellationToken);
+                    var words = await GetDocumentText(document, cancellationToken);
+                    await SetDocumentLabels(document, labels, cancellationToken);
+                    await SendSlackNotification(document, labels, cancellationToken);
             }
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error processing SQS record: {ErrorMessage}", ex.Message);
+            Logger.LogError(ex, "<Handler> Error processing SQS record: {ErrorMessage}", ex.Message);
         }
 
         return RecordHandlerResult.None;
     }
-    
+
     private static DocumentDetails? GetDocumentDetails(string json)
     {
         var message = JsonSerializer.Deserialize(json, Serializer.Default.DocumentMessage);
 
         if (message is null)
         {
-            Logger.LogError("Unable to deserialize document message");
-                
+            Logger.LogError("<Handler> Unable to deserialize document message");
+
             return null;
         }
 
@@ -59,20 +66,20 @@ public class Handler : ISqsRecordHandler
 
         if (document is null)
         {
-            Logger.LogError("Unable to deserialize document details");
-                
+            Logger.LogError("<Handler> Unable to deserialize document details");
+
             return null;
         }
 
-        Logger.LogInformation("Document successfully deserialized {@Document}", document);
-        
+        Logger.LogInformation("<Handler> Document successfully deserialized {@Document}", document);
+
         return document;
     }
 
-    private async Task<List<string>> GetDocumentLabels(DocumentDetails documentDetails, CancellationToken cancellationToken)
+    private async Task<List<string>> GetDocumentLabels(DocumentDetails document, CancellationToken cancellationToken)
     {
         var labels = new List<string>();
-        
+
         try
         {
             var request = new DetectLabelsRequest
@@ -81,35 +88,72 @@ public class Handler : ISqsRecordHandler
                 {
                     S3Object = new()
                     {
-                        Bucket = documentDetails.S3Bucket,
-                        Name = documentDetails.S3Key
+                        Bucket = document.S3Bucket,
+                        Name = document.S3Key
                     }
                 },
                 MaxLabels = 10,
                 MinConfidence = 75F
             };
-        
-            var detectLabelResponse = await _rekognitionClient.DetectLabelsAsync(request, cancellationToken);
-            
-            if (detectLabelResponse.Labels.Count == 0)
+
+            var response = await _rekognitionClient.DetectLabelsAsync(request, cancellationToken);
+
+            if (response.Labels.Count == 0)
             {
-                Logger.LogInformation("No labels detected");
+                Logger.LogInformation("<Handler> No labels detected");
                 return [];
             }
 
-            foreach (var label in detectLabelResponse.Labels)
+            foreach (var label in response.Labels)
             {
-                Logger.LogInformation("Detecting label {@Label}", label);
-                
+                Logger.LogDebug("<Handler> Detecting label {@Label}", label);
+
                 labels.Add(label.Name);
             }
+
+            Logger.LogInformation("<Handler> Labels detected {@Labels}", labels);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error using Rekognition: {ErrorMessage}", ex.Message);
+            Logger.LogError(ex, "<Handler> Error using Rekognition: {ErrorMessage}", ex.Message);
         }
 
         return labels;
+    }
+
+    private async Task<string> GetDocumentText(DocumentDetails document, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _textractClient.DetectDocumentTextAsync(new()
+            {
+                Document = new()
+                {
+                    S3Object = new()
+                    {
+                        Bucket = document.S3Bucket,
+                        Name = document.S3Key
+                    }
+                }
+            }, cancellationToken);
+
+            Logger.LogInformation("<Handler> Textract complete {StatusCode}", response.HttpStatusCode);
+
+            var words = response.Blocks
+                .Where(b => b.BlockType == BlockType.WORD)
+                .Select(w => w.Text)
+                .ToList();
+
+            Logger.LogInformation("<Handler> Textract complete {StatusCode}, {Count} words found", response.HttpStatusCode, words.Count);
+            Logger.LogInformation("<Handler> Textract: {Words}", string.Join(", ", words));
+
+            return string.Join(' ', words);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "<Handler> Error using Textract: {ErrorMessage}", ex.Message);
+            return "";
+        }
     }
 
     private async Task SetDocumentLabels(DocumentDetails document, List<string> labels, CancellationToken cancellationToken)
@@ -118,31 +162,39 @@ public class Handler : ISqsRecordHandler
         {
             return;
         }
-        
+
         var formKiqBaseUrl = Environment.GetEnvironmentVariable("FORMKIQ_BASE_URL");
         var formKiqApiKey = Environment.GetEnvironmentVariable("FORMKIQ_API_KEY");
 
         if (string.IsNullOrEmpty(formKiqBaseUrl) || string.IsNullOrEmpty(formKiqApiKey))
         {
-            Logger.LogWarning("FormKiQ base URL or API key not set");
+            Logger.LogWarning("<Handler> FormKiQ base URL or API key not set");
             return;
         }
-        
+
         var client = _httpClientFactory.CreateClient();
         client.BaseAddress = new(formKiqBaseUrl);
         client.DefaultRequestHeaders.Authorization = new(formKiqApiKey);
 
         var url = $"documents/{document.DocumentId}/attributes";
         var attributes = LabelAttributeList.Create(labels);
+
+        Logger.LogInformation("<Handler> Sending attributes {@Attributes}", new
+        {
+            Url = url,
+            ApiKey = formKiqApiKey,
+            Attributes = attributes
+        });
+
         var response = await client.PostAsJsonAsync(url, attributes, cancellationToken);
-        
+
         if (response.IsSuccessStatusCode)
         {
-            Logger.LogInformation("FormKiQ attributes set {StatusCode}", response.StatusCode);
+            Logger.LogInformation("<Handler> FormKiQ attributes set {StatusCode}", response.StatusCode);
         }
         else
         {
-            Logger.LogError("FormKiQ post failed {@Response}", response);
+            Logger.LogError("<Handler> FormKiQ post failed {@Response}", response);
         }
     }
 
@@ -152,7 +204,7 @@ public class Handler : ISqsRecordHandler
 
         if (string.IsNullOrWhiteSpace(slackWebhookUrl))
         {
-            Logger.LogWarning("Slack webhook URL is not set");
+            Logger.LogWarning("<Handler> Slack webhook URL is not set");
             return;
         }
 
@@ -168,11 +220,11 @@ public class Handler : ISqsRecordHandler
 
         if (response.IsSuccessStatusCode)
         {
-            Logger.LogInformation("Slack message sent {StatusCode}", response.StatusCode);
+            Logger.LogInformation("<Handler> Slack message sent {StatusCode}", response.StatusCode);
         }
         else
         {
-            Logger.LogError("Slack message failed {@Response}", response);
+            Logger.LogError("<Handler> Slack message failed {@Response}", response);
         }
     }
 }

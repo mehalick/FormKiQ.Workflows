@@ -1,5 +1,6 @@
 using Amazon;
 using Amazon.Rekognition;
+using Amazon.Textract;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FormKiQ.Workflows.OnDocumentCreated;
@@ -17,6 +18,7 @@ public static class Startup
             Region = RegionEndpoint.USEast1
         });
         services.AddAWSService<IAmazonRekognition>();
+        services.AddAWSService<IAmazonTextract>();
 
         services.AddSingleton<Handler>();
         services.AddSingleton<Processor>();
