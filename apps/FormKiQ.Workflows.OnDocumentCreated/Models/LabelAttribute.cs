@@ -2,8 +2,7 @@
 
 namespace FormKiQ.Workflows.OnDocumentCreated.Models;
 
-public record LabelAttribute([property: JsonPropertyName("stringValues")] List<string> StringValues)
-{
-    [JsonPropertyName("key")]
-    public string Key { get; set; } = "labels";
-}
+public record LabelAttribute(
+    [property: JsonPropertyName("key")] string Key,
+    [property: JsonPropertyName("stringValues")]
+    List<string> StringValues);

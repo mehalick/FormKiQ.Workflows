@@ -3,7 +3,6 @@ using Amazon.CDK.AWS.IAM;
 using Amazon.CDK.AWS.Lambda;
 using Amazon.CDK.AWS.Lambda.EventSources;
 using Amazon.CDK.AWS.Logs;
-using Amazon.CDK.AWS.S3;
 using Amazon.CDK.AWS.SNS;
 using Amazon.CDK.AWS.SNS.Subscriptions;
 using Amazon.CDK.AWS.SQS;
@@ -14,39 +13,25 @@ namespace FormKiQ.Workflows.Cdk;
 
 public sealed class InfraStack : Stack
 {
-    internal InfraStack(Construct scope, string id, IConfiguration configuration, IStackProps props) : base(scope, id, props)
+    private readonly string _stackId;
+    private readonly string _formKiqBaseUrl;
+    private readonly string _formKiQApiKey;
+    private readonly string _slackWebhookUrl;
+
+    internal InfraStack(Construct scope, string stackId, IConfiguration configuration, IStackProps props) : base(scope, stackId, props)
     {
-        var snsTopicArn = configuration["AWS:SnsTopicArn"];
-        var s3BucketName = configuration["AWS:S3BucketName"];
+        _stackId = stackId;
+        _formKiqBaseUrl = configuration["FormKiQ:BaseUrl"] ??  throw new("BaseUrl is missing");
+        _formKiQApiKey = configuration["FormKiQ:ApiKey"] ??  throw new("ApiKey is missing");
+        _slackWebhookUrl = configuration["Slack:WebhookUrl"] ??  throw new("WebhookUrl is missing");
 
-        if (string.IsNullOrWhiteSpace(snsTopicArn) || string.IsNullOrWhiteSpace(s3BucketName))
-        {
-            throw new("SNS topic ARN or S3 bucket name are missing");
-        }
-
-        // Create S3 bucket for resized images
-        var resizeBucket = new Bucket(this, "ResizeBucket", new BucketProps
-        {
-            BucketName = $"formkiq-workflows-resize-{Account}",
-            RemovalPolicy = RemovalPolicy.RETAIN,
-            Versioned = false,
-            PublicReadAccess = false,
-            BlockPublicAccess = BlockPublicAccess.BLOCK_ALL,
-            Encryption = BucketEncryption.S3_MANAGED,
-            LifecycleRules =
-            [
-                new LifecycleRule
-                {
-                    Enabled = true,
-                    Expiration = Duration.Days(30)
-                }
-            ]
-        });
+        var snsTopicArn = configuration["AWS:SnsTopicArn"] ??  throw new("SnsTopicArn is missing");
+        var s3BucketName = configuration["AWS:S3BucketName"] ??  throw new("S3BucketName is missing");
 
         var topic = Topic.FromTopicArn(this, "SnsDocumentEventTopic", snsTopicArn);
         var queue = CreateQueueWithSnsSubscription("DocumentCreatedQueue", topic);
 
-        var function = CreateOnDocumentCreatedFunction(configuration, resizeBucket.BucketName);
+        var function = CreateOnDocumentCreatedFunction();
         function.AddEventSource(new SqsEventSource(queue, new SqsEventSourceProps()));
 
         // Grant XRay permissions
@@ -95,13 +80,11 @@ public sealed class InfraStack : Stack
             Actions =
             [
                 "s3:GetObject",
-                "s3:GetObjectVersion"
+                "s3:GetObjectVersion",
+                "s3:PutObject"
             ],
             Resources = [$"arn:aws:s3:::{s3BucketName}/*"]
         }));
-
-        // Grant S3 write permissions to resize bucket
-        resizeBucket.GrantReadWrite(function);
     }
 
     private Queue CreateQueueWithSnsSubscription(string queueName, ITopic snsTopic)
@@ -122,32 +105,11 @@ public sealed class InfraStack : Stack
         return queue;
     }
 
-    private Function CreateOnDocumentCreatedFunction(IConfiguration configuration, string resizeBucketName)
+    private Function CreateOnDocumentCreatedFunction()
     {
         const string project = "FormKiQ.Workflows.OnDocumentCreated";
         const string dockerfilePath = $"../apps/{project}";
         const string handler = $"{project}::{project}.Function::FunctionHandler";
-
-        var formKiqBaseUrl = configuration["FormKiQ:BaseUrl"];
-
-        if (string.IsNullOrWhiteSpace(formKiqBaseUrl))
-        {
-            throw new("FormKiQ API URL is missing");
-        }
-
-        var formKiQApiKey = configuration["FormKiQ:ApiKey"];
-
-        if (string.IsNullOrWhiteSpace(formKiQApiKey))
-        {
-            throw new("FormKiQ API Key is missing");
-        }
-
-        var slackWebhookUrl = configuration["Slack:WebhookUrl"];
-
-        if (string.IsNullOrWhiteSpace(slackWebhookUrl))
-        {
-            throw new("Slack Webhook URL is missing");
-        }
 
         return new(this, "OnDocumentCreated",
             new FunctionProps
@@ -159,22 +121,25 @@ public sealed class InfraStack : Stack
                 Description = "FormKiQ workflow to run on document created.",
                 Handler = Handler.FROM_IMAGE,
                 Runtime = Runtime.FROM_IMAGE,
-                MemorySize = 256,
+                MemorySize = 512,
                 Architecture = Architecture.X86_64,
-                Timeout = Duration.Seconds(30),
+                Timeout = Duration.Seconds(90),
                 LoggingFormat = LoggingFormat.JSON,
                 LogGroup = new LogGroup(this, "OnDocumentCreatedLogGroup", new LogGroupProps
                 {
+                    LogGroupName = $"{_stackId}-OnDocumentCreatedLogGroup",
                     RemovalPolicy = RemovalPolicy.DESTROY,
                     Retention = RetentionDays.ONE_YEAR
                 }),
                 Tracing = Tracing.ACTIVE,
                 Environment = new Dictionary<string, string>
                 {
-                    { "SLACK_WEBHOOK_URL", slackWebhookUrl },
-                    { "FORMKIQ_BASE_URL", formKiqBaseUrl },
-                    { "FORMKIQ_API_KEY", formKiQApiKey },
-                    { "RESIZE_BUCKET_NAME", resizeBucketName }
+                    { "FORMKIQ_BASE_URL", _formKiqBaseUrl },
+                    { "FORMKIQ_API_KEY", _formKiQApiKey },
+                    { "SLACK_WEBHOOK_URL", _slackWebhookUrl },
+                    { "POWERTOOLS_SERVICE_NAME", "OnDocumentCreated" },
+                    { "POWERTOOLS_LOG_LEVEL", "Information" },
+                    { "POWERTOOLS_LOGGER_CASE", "CamelCase" }
                 }
             });
     }
