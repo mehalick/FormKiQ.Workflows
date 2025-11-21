@@ -54,9 +54,7 @@ public sealed class InfraStack : Stack
             [
                 "rekognition:DetectLabels",
                 "rekognition:DetectFaces",
-                "rekognition:DetectText",
-                "rekognition:DetectModerationLabels",
-                "rekognition:RecognizeCelebrities"
+                "rekognition:DetectText"
             ],
             Resources = ["*"]
         }));
@@ -80,7 +78,6 @@ public sealed class InfraStack : Stack
             Actions =
             [
                 "s3:GetObject",
-                "s3:GetObjectVersion",
                 "s3:PutObject"
             ],
             Resources = [$"arn:aws:s3:::{s3BucketName}/*"]

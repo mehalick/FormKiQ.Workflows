@@ -38,6 +38,17 @@ public class Handler : ISqsRecordHandler
                 return RecordHandlerResult.None;
             }
 
+            var imageExtensions = new List<string>
+            {
+                ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"
+            };
+
+            if (!imageExtensions.Contains(Path.GetExtension(document.Path),  StringComparer.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Skipping workflow, file {Path} is not an image", document.Path);
+                return RecordHandlerResult.None;
+            }
+
             var resizeImageResult = await _imageResizer.ResizeImage(document, cancellationToken);
 
             if (!resizeImageResult.IsSuccess)
@@ -48,7 +59,9 @@ public class Handler : ISqsRecordHandler
 
             var labels = await _labelProcessor.SaveLabels(document, resizeImageResult.S3Key, cancellationToken);
             await _textProcessor.SaveText(document, resizeImageResult.S3Key, cancellationToken);
-            await _slackNotifier.SendNotification(document, resizeImageResult.S3Key, labels, cancellationToken);
+
+            var request = new SendNotificationRequest(document, resizeImageResult.S3Key, labels);
+            await _slackNotifier.SendNotification(request, cancellationToken);
         }
         catch (Exception ex)
         {
