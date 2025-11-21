@@ -118,7 +118,7 @@ public sealed class InfraStack : Stack
                 Description = "FormKiQ workflow to run on document created.",
                 Handler = Handler.FROM_IMAGE,
                 Runtime = Runtime.FROM_IMAGE,
-                MemorySize = 512,
+                MemorySize = 2048,
                 Architecture = Architecture.X86_64,
                 Timeout = Duration.Seconds(90),
                 LoggingFormat = LoggingFormat.JSON,

@@ -1,6 +1,7 @@
 ﻿using System.Net.Http.Json;
 using Amazon.S3;
 using FormKiQ.Workflows.OnDocumentCreated.Models;
+using FormKiQ.Workflows.OnDocumentCreated.Services.Slack;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -58,6 +59,22 @@ public class SlackNotifier
             text = $"New document <{presignedUrl}|{request.Document.Path}> uploaded, labels: {request.LabelList}"
         };
 
+        var message = new Message
+        {
+            Text = "New document uploaded",
+            Blocks =
+            [
+                new Section
+                {
+                    Text = new($"Image: <{presignedUrl}|{request.Document.Path}>")
+                },
+                new Section
+                {
+                    Text = new($"Labels: {request.LabelList}")
+                },
+            ]
+        };
+
         // TODO: need to POST with HttpContent or create strongly-typed object (maybe NuGet package?)
         var j = $$"""
                   {
@@ -98,7 +115,7 @@ public class SlackNotifier
                   """;
 
         var client = _httpClientFactory.CreateClient();
-        var response = await client.PostAsJsonAsync(slackWebhookUrl, json, cancellationToken: cancellationToken);
+        var response = await client.PostAsJsonAsync(slackWebhookUrl, message, cancellationToken: cancellationToken);
 
         if (response.IsSuccessStatusCode)
         {
