@@ -1,75 +1,98 @@
-﻿using System.Net.Http.Json;
-using System.Text.Json;
+﻿using System.Text.Json;
 using Amazon.Lambda.SQSEvents;
 using AWS.Lambda.Powertools.BatchProcessing;
 using AWS.Lambda.Powertools.BatchProcessing.Sqs;
-using AWS.Lambda.Powertools.Logging;
+using FormKiQ.Workflows.OnDocumentCreated.Models;
+using FormKiQ.Workflows.OnDocumentCreated.Services;
+using Microsoft.Extensions.Logging;
 
 namespace FormKiQ.Workflows.OnDocumentCreated;
 
 public class Handler : ISqsRecordHandler
 {
+    private readonly ILogger<Handler> _logger;
+    private readonly ImageResizer _imageResizer;
+    private readonly LabelProcessor _labelProcessor;
+    private readonly TextProcessor  _textProcessor;
+    private readonly SlackNotifier _slackNotifier;
+
+    public Handler(ILogger<Handler> logger, ImageResizer imageResizer, LabelProcessor labelProcessor, TextProcessor textProcessor, SlackNotifier slackNotifier)
+    {
+        _logger = logger;
+        _imageResizer = imageResizer;
+        _labelProcessor = labelProcessor;
+        _textProcessor = textProcessor;
+        _slackNotifier = slackNotifier;
+    }
+
     public async Task<RecordHandlerResult> HandleAsync(SQSEvent.SQSMessage record, CancellationToken cancellationToken)
     {
-        Logger.LogInformation($"Handling SQS record {record.MessageId}");
+        _logger.LogInformation("Handling SQS record {MessageId}", record.MessageId);
 
         try
         {
-            var documentMessage = JsonSerializer.Deserialize(record.Body, Serializer.Default.DocumentMessage);
+            var document = GetDocumentDetails(record.Body);
 
-            if (documentMessage is null)
+            if (document is null || document.Type != "create") // TODO: add event filtering
             {
-                Logger.LogError("Unable to deserialize document message");
+                return RecordHandlerResult.None;
             }
-            else
+
+            var imageExtensions = new List<string>
             {
-                var documentDetails = JsonSerializer.Deserialize(documentMessage.Message, Serializer.Default.DocumentDetails);
+                ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"
+            };
 
-                if (documentDetails is null)
-                {
-                    Logger.LogError("Unable to deserialize document details");
-                }
-                else
-                {
-                    Logger.LogInformation("Document successfully deserialized {@Document}", documentDetails);
-
-                    await SendSlackNotification(documentDetails, cancellationToken);
-                }
+            if (!imageExtensions.Contains(Path.GetExtension(document.Path),  StringComparer.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Skipping workflow, file {Path} is not an image", document.Path);
+                return RecordHandlerResult.None;
             }
+
+            var resizeImageResult = await _imageResizer.ResizeImage(document, cancellationToken);
+
+            if (!resizeImageResult.IsSuccess)
+            {
+                _logger.LogError("Error resizing image");
+                return RecordHandlerResult.None;
+            }
+
+            var labels = await _labelProcessor.SaveLabels(document, resizeImageResult.S3Key, cancellationToken);
+            await _textProcessor.SaveText(document, resizeImageResult.S3Key, cancellationToken);
+
+            var request = new SendNotificationRequest(document, resizeImageResult.S3Key, labels);
+            await _slackNotifier.SendNotification(request, cancellationToken);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Logger.LogError(e);
+            _logger.LogError(ex, "Error processing SQS record: {ErrorMessage}", ex.Message);
         }
 
-        return await Task.FromResult(RecordHandlerResult.None);
+        return RecordHandlerResult.None;
     }
 
-    private static async Task SendSlackNotification(DocumentDetails documentDetails, CancellationToken cancellationToken)
+    private DocumentDetails? GetDocumentDetails(string json)
     {
-        var slackWebhookUrl = Environment.GetEnvironmentVariable("SLACK_WEBHOOK_URL");
+        var message = JsonSerializer.Deserialize(json, Serializer.Default.DocumentMessage);
 
-        if (string.IsNullOrWhiteSpace(slackWebhookUrl))
+        if (message is null)
         {
-            Logger.LogWarning("Slack webhook URL is not set");
-            return;
+            _logger.LogError("Unable to deserialize document message");
+
+            return null;
         }
 
-        var json = new
+        var document = JsonSerializer.Deserialize(message.Message, Serializer.Default.DocumentDetails);
+
+        if (document is null)
         {
-            text = $"New document <{documentDetails.Url}|{documentDetails.DocumentId}> uploaded"
-        };
+            _logger.LogError("Unable to deserialize document details");
 
-        var client = new HttpClient();
-        var response = await client.PostAsJsonAsync(slackWebhookUrl, json, cancellationToken: cancellationToken);
-
-        if (response.IsSuccessStatusCode)
-        {
-            Logger.LogInformation("Slack message sent {StatusCode}", response.StatusCode);
-
-            return;
+            return null;
         }
 
-        Logger.LogError("Slack message failed {@Response}", response);
+        _logger.LogInformation("Document successfully deserialized {@Document}", document);
+
+        return document;
     }
 }

@@ -1,20 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <RollForward>Major</RollForward>
-    <UserSecretsId>ae1aa9c0-3b88-4976-a698-deeb2363c183</UserSecretsId>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <OutputType>Exe</OutputType>
+        <RollForward>Major</RollForward>
+        <UserSecretsId>ae1aa9c0-3b88-4976-a698-deeb2363c183</UserSecretsId>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <!-- CDK Construct Library dependencies -->
-    <PackageReference Include="Amazon.CDK.Lib" />
-    <PackageReference Include="Constructs" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
-
-    <!-- jsii Roslyn analyzers (un-comment to obtain compile-time checks for missing required props
-    <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />
-    -->
-  </ItemGroup>
+    <ItemGroup>
+        <!-- CDK Construct Library dependencies -->
+        <PackageReference Include="Amazon.CDK.Lib" Version="2.225.0" />
+        <PackageReference Include="Amazon.JSII.Runtime" Version="1.119.0" />
+        <PackageReference Include="Constructs" Version="10.4.3" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+        
+        <!-- jsii Roslyn analyzers (un-comment to obtain compile-time checks for missing required props
+        <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />
+        -->
+    </ItemGroup>
 
 </Project>
