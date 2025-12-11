@@ -115,7 +115,7 @@ public class SlackNotifier
                   """;
 
         var client = _httpClientFactory.CreateClient();
-        var response = await client.PostAsJsonAsync(slackWebhookUrl, message, cancellationToken: cancellationToken);
+        var response = await client.PostAsJsonAsync(slackWebhookUrl, json, cancellationToken: cancellationToken);
 
         if (response.IsSuccessStatusCode)
         {

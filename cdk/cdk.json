@@ -1,5 +1,5 @@
 {
-  "app": "dotnet run --project FormKiQ.Workflows.Cdk/FormKiQ.Workflows.Cdk.csproj",
+  "app": "dotnet run --project FormKiQ.Cdk/FormKiQ.Cdk.csproj",
   "watch": {
     "include": [
       "**"

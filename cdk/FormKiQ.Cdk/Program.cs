@@ -1,7 +1,7 @@
 ﻿using Amazon.CDK;
 using Microsoft.Extensions.Configuration;
 
-namespace FormKiQ.Workflows.Cdk;
+namespace FormKiQ.Cdk;
 
 internal abstract class Program
 {

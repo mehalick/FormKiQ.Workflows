@@ -1,7 +1,7 @@
 ﻿using System.Globalization;
 using CsvHelper;
 
-namespace FormKiQ.Workflows.Reporting;
+namespace FormKiQ.Reporting;
 
 static class Program
 {
