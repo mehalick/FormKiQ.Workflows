@@ -1,0 +1,69 @@
+﻿@page "/documents"
+@using System.Globalization
+@using Humanizer
+@using Microsoft.AspNetCore.Components.QuickGrid
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject ApiClient ApiClient
+
+<PageTitle>Documents</PageTitle>
+
+<form method="post" @onsubmit="Submit">
+    <AntiforgeryToken />
+    <div>
+        <label>
+            API Key:
+            <InputText @bind-Value="Model!.ApiKey" />
+        </label>
+    </div>
+    <div>
+        <button type="submit">Submit</button>
+    </div>
+</form>
+
+@if (_documents is not null)
+{
+    <QuickGrid Items="_documents" Class="table table-bordered">
+        <TemplateColumn Context="document">
+            <img src="@document.ThumbnailUrl" alt="@document.Path" width="256" height="256"/>
+        </TemplateColumn>
+        <PropertyColumn Property="@(p => p.Path)" Sortable="true"/>
+        <PropertyColumn Property="@(p => p.InsertedDate)" Title="Uploaded" Format="yyyy-MM-dd" Sortable="true"/>
+        <TemplateColumn Title="File Size">
+            @context.ContentLength.Bytes().ToString("#.#0", CultureInfo.InvariantCulture)
+        </TemplateColumn>
+    </QuickGrid>
+}
+
+@code {
+
+
+    [SupplyParameterFromForm]
+    private AuthModel? Model { get; set; }
+
+    private IQueryable<Document>? _documents;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Model ??= new();
+
+        var apiKey = await localStorage.GetItemAsStringAsync("ApiKey");
+
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            Model.ApiKey = apiKey;
+        }
+    }
+
+    private async Task Submit()
+    {
+        var apiKey = Model!.ApiKey;
+        _documents = (await ApiClient.GetDocuments(apiKey)).AsQueryable();
+
+        await localStorage.SetItemAsStringAsync("ApiKey", apiKey);
+    }
+
+    public class AuthModel
+    {
+        public string ApiKey { get; set; } = "";
+    }
+}
