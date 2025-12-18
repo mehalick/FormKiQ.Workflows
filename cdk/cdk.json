@@ -1,5 +1,5 @@
 {
-  "app": "dotnet run --project FormKiQ.Cdk/FormKiQ.Cdk.csproj",
+  "app": "dotnet run --project FormKiQ.Cdk/FormKiQ.Cdk.csproj --configuration Release",
   "watch": {
     "include": [
       "**"

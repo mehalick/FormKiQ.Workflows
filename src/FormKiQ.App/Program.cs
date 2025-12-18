@@ -1,7 +1,8 @@
+using Blazored.LocalStorage;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
-namespace FormKiQ.Web;
+namespace FormKiQ.App;
 
 public abstract class Program
 {
@@ -17,6 +18,8 @@ public abstract class Program
         });
 
         builder.Services.AddHttpClient<ApiClient>(client => client.BaseAddress = new("https://ywr4pew5tl.execute-api.us-east-1.amazonaws.com"));
+
+        builder.Services.AddBlazoredLocalStorage();
 
         await builder.Build().RunAsync();
     }
