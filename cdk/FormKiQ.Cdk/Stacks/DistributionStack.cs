@@ -7,29 +7,32 @@ namespace FormKiQ.Cdk.Stacks;
 
 internal static class DistributionStack
 {
-    public enum BucketType { App, Cdn }
-
-    public static Bucket CreateBucketDistribution(this InfraStack stack, InfraStackProps props, BucketType bucketType)
+    public class Properties
     {
-        var bucketName = bucketType switch
-        {
-            BucketType.App => "",
-            BucketType.Cdn => $"formkiq-core-prod-thumbnails-{stack.Account}",
-            _ => throw new ArgumentOutOfRangeException(nameof(bucketType), bucketType, null)
-        };
+        public required string Name { get; init; }
+        public required string Description { get; init; }
+        public required string BucketName { get; init; }
+        public required bool Versioned { get; init; }
 
-        var bucket = CreateThumbnailsBucket(stack, bucketName);
-        _ = CreateThumbnailsDistribution(stack, bucket);
+        public required HttpMethods[] HttpsMethods { get; init; }
+
+        public required AllowedMethods AllowsMethods { get; init; }
+    }
+
+    public static Bucket CreateBucketDistribution(this InfraStack stack, Properties props)
+    {
+        var bucket = CreateThumbnailsBucket(stack, props);
+        _ = CreateThumbnailsDistribution(stack, bucket, props);
 
         return bucket;
     }
 
-    private static Bucket CreateThumbnailsBucket(InfraStack stack, string bucketName)
+    private static Bucket CreateThumbnailsBucket(InfraStack stack, Properties props)
     {
-        var bucket = new Bucket(stack, "ThumbnailsBucket", new BucketProps
+        var bucket = new Bucket(stack, $"{props.Name}Bucket", new BucketProps
         {
-            BucketName = bucketName,
-            Versioned = true,
+            BucketName = props.BucketName,
+            Versioned = props.Versioned,
             Encryption = BucketEncryption.S3_MANAGED,
             BlockPublicAccess = BlockPublicAccess.BLOCK_ALL,
 
@@ -47,7 +50,7 @@ internal static class DistributionStack
             [
                 new CorsRule
                 {
-                    AllowedMethods = [HttpMethods.GET, HttpMethods.HEAD],
+                    AllowedMethods = props.HttpsMethods,
                     AllowedOrigins = ["*"],
                     AllowedHeaders = ["*"],
                     MaxAge = 3000
@@ -61,14 +64,14 @@ internal static class DistributionStack
         return bucket;
     }
 
-    private static Distribution CreateThumbnailsDistribution(InfraStack stack, Bucket bucket)
+    private static Distribution CreateThumbnailsDistribution(InfraStack stack, Bucket bucket, Properties props)
     {
-        var policy = CreateSecurityHeadersPolicy(stack, bucket, "Thumbnails");
+        var policy = CreateSecurityHeadersPolicy(stack, bucket, props);
         var s3Origin = S3BucketOrigin.WithOriginAccessControl(bucket);
 
-        var distribution = new Distribution(stack, "ThumbnailsDistribution", new DistributionProps
+        var distribution = new Distribution(stack, $"{props.Name}Distribution", new DistributionProps
         {
-            Comment = "FormKiQ Thumbnails CDN",
+            Comment = props.Description,
 
             DefaultBehavior = new BehaviorOptions
             {
@@ -78,7 +81,7 @@ internal static class DistributionStack
                 OriginRequestPolicy = OriginRequestPolicy.CORS_S3_ORIGIN,
                 ResponseHeadersPolicy = policy,
                 Compress = true,
-                AllowedMethods = AllowedMethods.ALLOW_GET_HEAD,
+                AllowedMethods = props.AllowsMethods,
                 CachedMethods = CachedMethods.CACHE_GET_HEAD
             },
             PriceClass = PriceClass.PRICE_CLASS_100,
@@ -119,9 +122,9 @@ internal static class DistributionStack
     /// Creates a response headers policy with security headers
     /// </summary>
     /// <returns>The configured response headers policy</returns>
-    private static ResponseHeadersPolicy CreateSecurityHeadersPolicy(InfraStack stack, Bucket bucket, string bucketName)
+    private static ResponseHeadersPolicy CreateSecurityHeadersPolicy(InfraStack stack, Bucket bucket, Properties props)
     {
-        return new(stack, $"{bucketName}SecurityHeadersPolicy", new ResponseHeadersPolicyProps
+        return new(stack, $"{props.Name}SecurityHeadersPolicy", new ResponseHeadersPolicyProps
         {
             ResponseHeadersPolicyName = $"{bucket.BucketName}-security-headers",
             Comment = $"Security headers policy for CloudFront {bucket.BucketName} distribution",
