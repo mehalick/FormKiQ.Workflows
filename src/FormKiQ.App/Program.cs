@@ -17,7 +17,9 @@ public abstract class Program
             BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)
         });
 
-        builder.Services.AddHttpClient<ApiClient>(client => client.BaseAddress = new("https://ywr4pew5tl.execute-api.us-east-1.amazonaws.com"));
+        var x = builder.Configuration;
+
+        builder.Services.AddHttpClient<ApiClient>(client => client.BaseAddress = new(builder.Configuration["FormKiQApiHost"]!));
 
         builder.Services.AddBlazoredLocalStorage();
 

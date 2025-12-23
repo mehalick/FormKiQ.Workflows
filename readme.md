@@ -28,3 +28,19 @@ You can then deploy via:
 ```powershell
 cdk deploy
 ```
+
+## Web App
+
+To run the web app locally, you'll need to set user secrets:
+
+```powershell
+cd .\src\FormKiQ.App
+dotnet user-secrets init
+dotnet user-secrets set "CloudFrontHost", "*********"
+```
+
+You can deploy manually via:
+
+```asm
+ aws s3 sync ".\src\FormKiQ.App\bin\Release\net10.0\publish\wwwroot" {S3BucketArn}
+```

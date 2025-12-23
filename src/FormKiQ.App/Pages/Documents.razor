@@ -1,41 +1,41 @@
 ﻿@page "/documents"
 @using System.Globalization
 @using Humanizer
-@using Microsoft.AspNetCore.Components.QuickGrid
-@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@inject IConfiguration Configuration
 @inject ApiClient ApiClient
 
 <PageTitle>Documents</PageTitle>
 
-<form method="post" @onsubmit="Submit">
-    <AntiforgeryToken />
-    <div>
-        <label>
-            API Key:
-            <InputText @bind-Value="Model!.ApiKey" />
-        </label>
-    </div>
-    <div>
-        <button type="submit">Submit</button>
-    </div>
+<form method="post" @onsubmit="Submit" class="input-validation-required">
+    <wa-input name="name" label="Name" required @bind="Model!.ApiKey"></wa-input>
+    <br />
+    <wa-button type="submit" variant="brand">Submit</wa-button>
 </form>
 
 @if (_documents is not null)
 {
-    <QuickGrid Items="_documents" Class="table table-bordered">
-        <TemplateColumn Context="document">
-            <img src="@document.ThumbnailUrl" alt="@document.Path" width="256" height="256"/>
-        </TemplateColumn>
-        <PropertyColumn Property="@(p => p.Path)" Sortable="true"/>
-        <PropertyColumn Property="@(p => p.InsertedDate)" Title="Uploaded" Format="yyyy-MM-dd" Sortable="true"/>
-        <TemplateColumn Title="File Size">
-            @context.ContentLength.Bytes().ToString("#.#0", CultureInfo.InvariantCulture)
-        </TemplateColumn>
-    </QuickGrid>
+    <br />
+    <div class="wa-grid">
+        @foreach (var document in _documents)
+        {
+            <wa-card class="card-media">
+                <div slot="media" class="wa-frame:landscape">
+                    <img
+                        src="@Configuration["CloudFrontHost"]/@(document.DocumentId).webp"
+                        alt="@document.DocumentId"
+                    />
+                </div>
+                <small>
+                    @document.InsertedDate.ToString("yyyy-MM-dd")
+                    @document.ContentLength.Bytes().ToString("#.#0", CultureInfo.InvariantCulture)
+                </small>
+            </wa-card>
+        }
+    </div>
 }
 
 @code {
-
 
     [SupplyParameterFromForm]
     private AuthModel? Model { get; set; }
@@ -46,7 +46,7 @@
     {
         Model ??= new();
 
-        var apiKey = await localStorage.GetItemAsStringAsync("ApiKey");
+        var apiKey = await LocalStorage.GetItemAsStringAsync("ApiKey");
 
         if (!string.IsNullOrWhiteSpace(apiKey))
         {
@@ -59,7 +59,7 @@
         var apiKey = Model!.ApiKey;
         _documents = (await ApiClient.GetDocuments(apiKey)).AsQueryable();
 
-        await localStorage.SetItemAsStringAsync("ApiKey", apiKey);
+        await LocalStorage.SetItemAsStringAsync("ApiKey", apiKey);
     }
 
     public class AuthModel

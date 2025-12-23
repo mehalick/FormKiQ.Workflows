@@ -33,14 +33,13 @@ public class ApiClient
 
             var rand = new Random();
 
-            for (var i = 0; i < 100; i++)
+            for (var i = 0; i < 9; i++)
             {
-                var d = new Document(
-                    document.DocumentId,
-                    document.UserId,
-                    document.Path,
-                    rand.NextInt64(0L, 100000L),
-                    document.InsertedDate.AddDays(-i));
+                var d = document with
+                {
+                    ContentLength = rand.NextInt64(0L, 100000L),
+                    InsertedDate = document.InsertedDate.AddDays(-i)
+                };
 
                 response.Documents.Add(d);
             }
@@ -62,10 +61,8 @@ public record Document(
     string UserId,
     string Path,
     long ContentLength,
-    [property:JsonConverter(typeof(DateTimeOffsetConverterUsingDateTimeParse))]DateTimeOffset InsertedDate)
-{
-    public string ThumbnailUrl => $"https://dst7mdynk1sft.cloudfront.net/{DocumentId}.webp";
-}
+    [property: JsonConverter(typeof(DateTimeOffsetConverterUsingDateTimeParse))]
+    DateTimeOffset InsertedDate);
 
 public class DateTimeOffsetConverterUsingDateTimeParse : JsonConverter<DateTimeOffset>
 {

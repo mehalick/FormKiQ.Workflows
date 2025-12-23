@@ -58,7 +58,7 @@ internal static class DistributionStack
             ],
 
             RemovalPolicy = RemovalPolicy.DESTROY,
-            AutoDeleteObjects = true
+            AutoDeleteObjects = false
         });
 
         return bucket;
