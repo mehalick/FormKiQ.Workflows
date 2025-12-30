@@ -8,6 +8,7 @@ internal abstract class Program
     public static void Main()
     {
         var builder = new ConfigurationBuilder();
+        builder.AddEnvironmentVariables();
         builder.AddUserSecrets<Program>();
 
         var configuration = builder.Build();
