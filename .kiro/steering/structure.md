@@ -6,31 +6,39 @@ The solution follows a clean separation between application code and infrastruct
 
 ```
 FormKiQ.Workflows/
-├── apps/                           # Lambda function applications
-│   └── FormKiQ.Workflows.OnDocumentCreated/
-│       ├── Function.cs             # Lambda entry point with batch processing
-│       ├── Handler.cs              # Record handler for individual messages
-│       ├── Processor.cs            # Batch processor implementation
-│       ├── Serializer.cs           # Custom serialization logic
-│       ├── DocumentMessage.cs      # Message models
-│       ├── DocumentDetails.cs      # Domain models
-│       └── Dockerfile              # Lambda container image definition
-├── infra/                          # Infrastructure as Code (CDK)
-│   ├── FormKiQ.Workflows.Cdk/
+├── src/                            # Source code applications
+│   ├── FormKiQ.Workflows.OnDocumentCreated/  # Lambda function for document processing
+│   │   ├── Function.cs             # Lambda entry point with batch processing
+│   │   ├── Handler.cs              # Record handler for individual messages
+│   │   ├── Processor.cs            # Batch processor implementation
+│   │   ├── Serializer.cs           # Custom serialization logic
+│   │   ├── Startup.cs              # Dependency injection configuration
+│   │   ├── Models/                 # Domain models (DocumentMessage, DocumentDetails, etc.)
+│   │   ├── Services/               # Business logic services (ImageResizer, TextProcessor, etc.)
+│   │   └── Dockerfile              # Lambda container image definition
+│   ├── FormKiQ.App/                # Blazor WebAssembly application
+│   ├── FormKiQ.Reporting/          # Reporting console application
+│   └── FormKiQ.Uploader/           # File upload utility
+├── cdk/                            # Infrastructure as Code (CDK)
+│   ├── FormKiQ.Cdk/
 │   │   ├── Program.cs              # CDK app entry point
-│   │   └── InfraStack.cs           # Stack definition
+│   │   ├── InfraStack.cs           # Main stack definition
+│   │   ├── InfraStackProps.cs      # Stack properties
+│   │   └── Stacks/                 # Additional stack definitions
 │   ├── cdk.json                    # CDK configuration
 │   └── deploy.ps1                  # Deployment script
+├── apps/                           # Application hosting configurations
+│   └── FormKiQ.Web/               # Web application hosting
 ├── docs/                           # Documentation
-├── Directory.Build.props           # Shared MSBuild properties
-└── Directory.Packages.props        # Central package version management
+└── Directory.Build.props           # Shared MSBuild properties
 ```
 
 ## Naming Conventions
 
 ### Projects
 - Lambda functions: `FormKiQ.Workflows.<EventName>` (e.g., OnDocumentCreated)
-- Infrastructure: `FormKiQ.Workflows.Cdk`
+- Infrastructure: `FormKiQ.Cdk` (note: not FormKiQ.Workflows.Cdk)
+- Applications: `FormKiQ.<AppName>` (e.g., FormKiQ.App, FormKiQ.Reporting)
 
 ### Lambda Function Structure
 Each Lambda function follows a consistent pattern:
@@ -39,24 +47,25 @@ Each Lambda function follows a consistent pattern:
 - `Handler.cs` - Implements record-level processing logic with constructor injection
 - `Processor.cs` - Batch processor for SQS messages
 - `Serializer.cs` - Custom JSON serialization
-- Domain models (e.g., `DocumentMessage.cs`, `DocumentDetails.cs`)
+- `Models/` directory - Domain models (e.g., `DocumentMessage.cs`, `DocumentDetails.cs`)
+- `Services/` directory - Business logic services (e.g., `ImageResizer.cs`, `TextProcessor.cs`)
 - `Dockerfile` - Multi-stage container build for Lambda deployment
 
 ## Configuration Files
 
 ### Solution Level
 - `Directory.Build.props` - Shared build properties (target framework, language features)
-- `Directory.Packages.props` - Central package version management
 - `FormKiQ.Workflows.sln` - Solution file
+- Note: Central Package Management is not currently enabled (no Directory.Packages.props)
 
 ### Infrastructure
-- `infra/cdk.json` - CDK toolkit configuration
-- `infra/deploy.ps1` - Deployment automation script
+- `cdk/cdk.json` - CDK toolkit configuration
+- `cdk/deploy.ps1` - Deployment automation script
 
 ### Lambda Functions
 - `aws-lambda-tools-defaults.json` - Lambda deployment defaults
 - `Dockerfile` - Container image build instructions
-- `.csproj` - Project file with Lambda-specific settings
+- `.csproj` - Project file with Lambda-specific settings and individual package references
 
 ## Architecture Patterns
 
@@ -73,26 +82,28 @@ Each Lambda function follows a consistent pattern:
 
 ### Infrastructure
 - AWS CDK with C# for infrastructure definition
-- Infrastructure code lives in `infra/` directory
+- Infrastructure code lives in `cdk/` directory (not `infra/`)
 - Separate from application code for clear boundaries
 
 ## Adding New Lambda Functions
 
 When creating new Lambda functions:
-1. Create new project under `apps/FormKiQ.Workflows.<EventName>/`
+1. Create new project under `src/FormKiQ.Workflows.<EventName>/`
 2. Follow the established pattern:
    - `Function.cs` - Instance-based handler with DI
    - `Startup.cs` - Configure services (AddHttpClient, register handlers)
    - `Handler.cs` - Constructor injection for dependencies
    - `Processor.cs` - Batch processor
-   - Domain models and serializers
+   - `Models/` directory for domain models
+   - `Services/` directory for business logic
+   - Serializers as needed
 3. Include Dockerfile for container-based deployment
    - Use multi-stage build (SDK for build, Lambda base image for runtime)
    - Set CMD to the Lambda handler
    - Target linux-x64 runtime with PublishReadyToRun
-4. Add package references: Microsoft.Extensions.DependencyInjection, Microsoft.Extensions.Http
+4. Add package references directly to .csproj (no central package management currently)
 5. Add project reference to solution file
-6. Update CDK stack in `infra/FormKiQ.Workflows.Cdk/InfraStack.cs`
+6. Update CDK stack in `cdk/FormKiQ.Cdk/InfraStack.cs`
    - Use `Code.FromAssetImage()` for container deployment
    - Point to Dockerfile directory
    - Specify handler in `AssetImageCodeProps.Cmd`

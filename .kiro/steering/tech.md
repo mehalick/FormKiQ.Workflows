@@ -8,24 +8,33 @@
 
 ## AWS Services & Libraries
 - AWS Lambda (serverless compute)
-- AWS CDK 2.220.0 (infrastructure as code)
-- AWS Lambda Powertools 3.0.1 (logging, batch processing)
+- AWS CDK 2.225.0 (infrastructure as code)
+- AWS Lambda Powertools 3.0.2 (logging, batch processing)
 - Amazon SQS (message queuing)
+- AWS Rekognition (image analysis)
+- AWS Textract (document text extraction)
+- Amazon S3 (object storage)
 
 ## Key Dependencies
-- Amazon.Lambda.Core 2.7.1
-- Amazon.Lambda.RuntimeSupport 1.13.1
+- Amazon.Lambda.Core 2.8.0
 - Amazon.Lambda.SQSEvents 2.2.0
 - Amazon.Lambda.Serialization.SystemTextJson 2.4.4
-- AWS.Lambda.Powertools.BatchProcessing 3.0.1
-- AWS.Lambda.Powertools.Logging 3.0.1
-- Microsoft.Extensions.DependencyInjection 9.0.0
-- Microsoft.Extensions.Http 9.0.0
+- AWS.Lambda.Powertools.BatchProcessing 3.0.2
+- AWS.Lambda.Powertools.Logging 3.0.2
+- Microsoft.Extensions.DependencyInjection 10.0.0
+- Microsoft.Extensions.Http 10.0.0
+- Microsoft.Extensions.Configuration.EnvironmentVariables 10.0.0
+- AWSSDK.Extensions.NETCore.Setup 4.0.3.12
+- AWSSDK.Rekognition 4.0.3.3
+- AWSSDK.S3 4.0.11.3
+- AWSSDK.Textract 4.0.3.3
+- SixLabors.ImageSharp 3.1.12
 - JetBrains.Annotations 2025.2.2
 
 ## Package Management
-- Central Package Management enabled via Directory.Packages.props
-- All package versions managed centrally at solution level
+- Individual package references in each .csproj file
+- Package versions managed per project (no central package management currently)
+- Consider implementing Central Package Management via Directory.Packages.props for better version consistency
 
 ## Build & Deployment
 
@@ -40,8 +49,8 @@ dotnet build FormKiQ.Workflows.sln -c Release
 
 ### Infrastructure Deployment
 ```powershell
-# Deploy infrastructure (from infra directory)
-cd infra
+# Deploy infrastructure (from cdk directory)
+cd cdk
 .\deploy.ps1
 
 # Or manually:
